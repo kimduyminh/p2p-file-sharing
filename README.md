@@ -27,3 +27,5 @@
     - Input the Ngrok forwarding address from Machine 1 (e.g., 0.tcp.ap.ngrok.io:12345)
     - Input the port number from Machine 1 (e.g., 5000)
     - Use `/sendfile` command to send a file
+- Example:
+ ![img.png](img.png)
