@@ -1,13 +1,29 @@
-### To run both server and client on the same machine:
-- To run server: `python server.py --host 127.0.0.1 --port 5000`
-- To run client: `python client.py 127.0.0.1 5000`
-Run both server and client in separate terminals.
+## P2P TCP File Transfer with Ngrok Port Forwarding
+
+### Config the Ngrok tunnel
+- Download Ngrok from [ngrok.com](https://ngrok.com/download) then setup like documents
+- Login to your Ngrok account and get the authtoken to config Ngrok on your machine
+
+### To run on the same machine:
+- Terminal 1: `python p2p_tcp_with_ngrok_port_forward.py`
+  - Input the port number to listen on (e.g., 5000)
+  - You will see the Ngrok forwarding address (e.g., 0.tcp.ap.ngrok.io:12345)
+- Terminal 2: `python p2p_tcp_with_ngrok_port_forward.py`
+  - Input the port number as in Terminal 1 (different from the one in Terminal 1)
+  - Use `/connect` command to connect to the Ngrok forwarding address
+  - Input the Ngrok forwarding address from Terminal 1 (e.g., 0.tcp.ap.ngrok.io:12345)
+  - Input the port number from Terminal 1 (e.g., 5000)
+  - Use `/sendfile` command to send a file
 
 ### - To run server and client on 2 different machines and networks:
-### Use ngrok: 
-- `choco install ngrok`
-- `ngrok config add-authtoken <your_auth_token>`
-- `ngrok tcp 5000` (to run with tcp protocol)
-![img.png](assets/img.png)
-- Use the tcp forwarding address to run the client with the command: `python client.py <tcp_forwarding_address> <port>`
-- For example: `python client.py 0.tcp.ap.ngrok.io 12345`
+- Machine 1:
+  - Run: `python p2p_tcp_with_ngrok_port_forward.py`
+    - Input the port number to listen on (e.g., 5000)
+    - You will see the Ngrok forwarding address (e.g., 0.tcp.ap.ngrok.io:12345)
+- Machine 2:
+  - Run: `python p2p_tcp_with_ngrok_port_forward.py`
+    - Input the port number as in Machine 1
+    - Use `/connect` command to connect to the Ngrok forwarding address
+    - Input the Ngrok forwarding address from Machine 1 (e.g., 0.tcp.ap.ngrok.io:12345)
+    - Input the port number from Machine 1 (e.g., 5000)
+    - Use `/sendfile` command to send a file
