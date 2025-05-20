@@ -7,6 +7,13 @@ import json
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 
+# --- Thêm pyngrok để mở TCP tunnel ---
+from pyngrok import ngrok, conf
+
+# Nếu bạn có ngrok auth token, có thể gán trực tiếp (không bắt buộc nếu đã set env NGROK_AUTHTOKEN)
+# conf.get_default().auth_token = "YOUR_NGROK_AUTHTOKEN"
+# ----------------------------------------
+
 BUFFER = 1024
 connection = None
 conn_lock = threading.Lock()
@@ -38,12 +45,14 @@ def recv_loop(conn):
     header_buffer = b""
     file = None
     remaining = 0
+
     while True:
         try:
             data = conn.recv(BUFFER)
             if not data:
                 print("\n[*] Peer đã ngắt kết nối")
                 break
+
             if file:
                 file.write(data)
                 remaining -= len(data)
@@ -51,7 +60,9 @@ def recv_loop(conn):
                     file.close()
                     print(f"\n[*] Đã nhận xong file: {file.name}\n> ", end="")
                     file = None
+
             else:
+                # Nếu là header JSON
                 if header_buffer or data.startswith(b"{"):
                     header_buffer += data
                     if b"\n" in header_buffer:
@@ -65,10 +76,13 @@ def recv_loop(conn):
                             remaining -= len(rest)
                         header_buffer = b""
                 else:
+                    # Bình thường: chat text
                     print(f"\r[Peer] {data.decode()}\n> ", end="")
+
         except Exception:
             continue
-    # khi loop kết thúc, đóng kết nối
+
+    # Khi recv_loop kết thúc, dọn dẹp kết nối
     with conn_lock:
         if connection is conn:
             conn.close()
@@ -82,6 +96,7 @@ def listener_thread(listen_port):
     listener.bind(("0.0.0.0", listen_port))
     listener.listen(1)
     print(f"[*] Đang chờ kết nối đến trên port {listen_port}...")
+
     while True:
         c, addr = listener.accept()
         with conn_lock:
@@ -111,12 +126,20 @@ def connect_peer(ip, port):
 
 
 def main():
+    # Nhập port lắng nghe
     try:
         listen_port = int(input("Nhập port để lắng nghe: ").strip())
     except ValueError:
         print("[!] Port không hợp lệ.")
         return
 
+    # --- Mở ngrok TCP tunnel ---
+    tcp_tunnel = ngrok.connect(listen_port, "tcp")
+    public_addr = tcp_tunnel.public_url  # ví dụ "tcp://3.tcp.ngrok.io:12345"
+    print(f"[*] Ngrok tunnel đã sẵn sàng: {public_addr}")
+    # --------------------------------
+
+    # Start listener
     threading.Thread(target=listener_thread, args=(listen_port,), daemon=True).start()
 
     while True:
@@ -125,6 +148,7 @@ def main():
             continue
         if cmd.lower() in ("exit", "quit"):
             break
+
         if cmd == "/connect":
             ip = input("Nhập IP peer: ").strip()
             try:
@@ -134,18 +158,29 @@ def main():
                 continue
             connect_peer(ip, port)
             continue
+
         if cmd == "/sendfile":
             with conn_lock:
                 if connection is None:
                     print("[!] Chưa có kết nối nào.")
                     continue
+            mode = input("Chọn chế độ: (1) GUI, (2) Nhập đường dẫn: ").strip()
+            if mode == "1":
                 path = choose_file()
-                if path:
-                    send_file(connection, path)
-                else:
-                    print("[!] Không có file nào được chọn.")
+            else:
+                path = input("Nhập đường dẫn file để gửi: ").strip()
+
+            if not path:
+                print("[!] Không có file nào được chọn.")
+                continue
+            if not os.path.isfile(path):
+                print(f"[!] File không tồn tại: {path}")
+                continue
+
+            send_file(connection, path)
             continue
-        # lệnh chat bình thường
+
+        # Chat bình thường
         with conn_lock:
             if connection is None:
                 print("[!] Chưa có kết nối nào.")
@@ -154,10 +189,17 @@ def main():
                     connection.sendall(cmd.encode())
                 except Exception:
                     print("[!] Lỗi gửi tin nhắn.")
-    # khi thoát, đóng kết nối nếu có
+
+    # Khi thoát, đóng kết nối nếu có
     with conn_lock:
         if connection:
             connection.close()
+
+    # --- Dọn ngrok trước khi exit ---
+    ngrok.disconnect(tcp_tunnel.public_url)
+    ngrok.kill()
+    # --------------------------------
+
     print("Đã thoát.")
 
 if __name__ == "__main__":
