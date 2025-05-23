@@ -28,7 +28,7 @@ def send_messages(conn):
     except BrokenPipeError:
         pass
 
-def main(host="0.0.0.0", port=5000):
+def main(host="127.0.0.1", port=5000):
     # TCP
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((host, port))
@@ -44,7 +44,7 @@ def main(host="0.0.0.0", port=5000):
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--host", default="0.0.0.0", help="Địa chỉ bind (mặc định 0.0.0.0)")
+    p.add_argument("--host", default="127.0.0.1", help="Địa chỉ bind (mặc định 127.0.0.1)")
     p.add_argument("--port", type=int, default=5000, help="Port lắng nghe")
     args = p.parse_args()
     main(args.host, args.port)
