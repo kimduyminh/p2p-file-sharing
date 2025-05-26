@@ -2,25 +2,35 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 import hashlib
-
+import ecc_keygen as ecc_keygen
+import ecc_signing_and_verify as ecc_signing_and_verify
+import file_handling as file_handling
 #test
 PASSWORD_FILE = "password.txt"
-PUBLIC_KEY = "RSA-2048:ABCD1234EFGH5678"
 DEFAULT_IP = "127.0.0.1"
 DEFAULT_PORT = 5000
+
 
 #password
 def hash_password(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
-def save_password(pwd):
-    with open(PASSWORD_FILE, "w") as f:
-        f.write(hash_password(pwd))
+def create_keys_pair(pwd):
+    ecc_keygen.ecc_keygen(pwd)
 
-def check_password(pwd):
-    with open(PASSWORD_FILE, "r") as f:
-        return hash_password(pwd) == f.read().strip()
+def load_keys_pair(pwd):
+    global private_key
+    global public_key
+    try:
+        output = ecc_keygen.ecc_keygen(pwd).load_key(pwd)
+        private_key = output[0]
+        public_key = output[1]
 
+        print(ecc_keygen.ecc_keygen(pwd).public_encode_to_string(public_key))
+        return True
+    except:
+        print("Failed to load private key")
+        return False
 def start_auth():
     def submit():
         password = entry.get()
@@ -28,13 +38,14 @@ def start_auth():
             messagebox.showwarning("Thiếu", "Vui lòng nhập mật khẩu!")
             return
 
-        if not os.path.exists(PASSWORD_FILE):
-            save_password(password)
+        if not os.path.exists("private_key.pem"):
+            create_keys_pair(password)
             messagebox.showinfo("Thành công", "Đăng ký thành công")
             root.destroy()
+            load_keys_pair(password)
             open_main_gui()
         else:
-            if check_password(password):
+            if load_keys_pair(password):
                 messagebox.showinfo("OK", "Đăng nhập thành công")
                 root.destroy()
                 open_main_gui()
@@ -63,12 +74,16 @@ send_progress_widget = None
 #Send
 def send_mode():
     global send_log_widget, send_progress_widget
+    signer_and_verifier = ecc_signing_and_verify.ecc_signing_and_verify(private_key=private_key, public_key=public_key,
+                                                                        public_key_sender=None)
+    file_handler = file_handling.file_handling(signer_and_verifier)
 
     def select_file():
         file_path = filedialog.askopenfilename()
         if file_path:
             show_log(log, f"[Send] Đã chọn file: {file_path}")
             progress['value'] = 0
+            file_handler.split_file(file_path)
             show_log(log, "[Send] File sẵn sàng để gửi")
 
     win = tk.Toplevel()
@@ -76,7 +91,7 @@ def send_mode():
 
     tk.Label(win, text=f"Your IP: {DEFAULT_IP}").pack()
     tk.Label(win, text=f"Your Port: {DEFAULT_PORT}").pack()
-    tk.Label(win, text=f"Public Key: {PUBLIC_KEY}").pack()
+    tk.Label(win, text=f"Public Key: {ecc_keygen.public_decode_from_string(public_key)}").pack()
 
     ttk.Button(win, text="Chọn file để gửi", command=select_file).pack(pady=5)
 
@@ -117,7 +132,12 @@ def receive_mode():
                     show_log(send_log_widget, "[Send] Gửi thành công")
 
         show_log(log, "[Receive] Tải file thành công")
-
+        decoded_pubkey = ecc_keygen.public_decode_from_string(pubkey)
+        signer_and_verifier = ecc_signing_and_verify.ecc_signing_and_verify(private_key=private_key,
+                                                                            public_key=public_key,
+                                                                            public_key_sender=decoded_pubkey)
+        file_handler = file_handling.file_handling(signer_and_verifier)
+        file_handler.merge_chunks()
     win = tk.Toplevel()
     win.title("Receive")
 
@@ -141,6 +161,8 @@ def receive_mode():
     log = tk.Text(win, height=5, width=50)
     log.pack()
     show_log(log, "[Receive] Waiting")
+
+
 
 #Main
 def open_main_gui():

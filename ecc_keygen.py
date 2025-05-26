@@ -2,6 +2,19 @@ import os
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
+
+
+def public_encode_to_string(public_key):
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return pem.decode('utf-8')
+
+
+def public_decode_from_string(pem_str):
+    return serialization.load_pem_public_key(pem_str.encode('utf-8'))
+
 class ecc_keygen:
     def __init__(self,passw):
         password = passw.encode()
@@ -29,3 +42,4 @@ class ecc_keygen:
         with open("public_key.pem", "rb") as f:
             public_key = serialization.load_pem_public_key(f.read())
         return [private_key, public_key]
+

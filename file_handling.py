@@ -2,14 +2,13 @@ import os
 import hashlib
 import zipfile
 import shutil
-from ecc_signing_and_verify import ecc_signing_and_verify
 class file_handling:
-    def __init__(self):
+    def __init__(self,ecc_signing_and_verify):
         self.os=os
         self.hashlib=hashlib
         self.zipfile=zipfile
         self.shutil=shutil
-        self.ecc_signing_and_verify=ecc_signing_and_verify()
+        self.ecc_signing_and_verify=ecc_signing_and_verify
 
         pass
 
@@ -117,6 +116,6 @@ class file_handling:
 
 
 # Sample usage
-file_handling=file_handling()
-file_handling.split_file("File")
-file_handling.merge_chunks()
+#file_handling=file_handling()
+#file_handling.split_file("File")
+#file_handling.merge_chunks()

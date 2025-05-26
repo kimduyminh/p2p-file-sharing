@@ -2,11 +2,10 @@ from ecc_keygen import ecc_keygen as ecc_keygen
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 class ecc_signing_and_verify:
-    def __init__(self):
-        self.ecc_keygen = ecc_keygen("ez12345678")
-        self.keys = self.ecc_keygen.load_key("ez12345678")
-        self.private_key = self.keys[0]
-        self.public_key = self.keys[1]
+    def __init__(self,private_key, public_key, public_key_sender):
+        self.private_key = private_key
+        self.public_key = public_key
+        self.public_key_sender = public_key_sender
         pass
 
     def sign(self,path):
@@ -20,7 +19,7 @@ class ecc_signing_and_verify:
     def verify(self,path,signature):
         try:
             data = open(path, "rb").read()
-            self.public_key.verify(
+            self.public_key_sender.verify(
                 signature,
                 data,
                 ec.ECDSA(hashes.SHA256())
