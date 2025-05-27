@@ -6,10 +6,13 @@ import socket
 import json
 import threading
 import hashlib
-import ecc_keygen
-import ecc_signing_and_verify
-import file_handling
+import ecc_keygen as ecc_keygen
+import ecc_signing_and_verify as ecc_signing_and_verify
+import file_handling as file_handling
 from pyngrok import ngrok
+
+ngrok.kill()
+# tunnel = ngrok.connect(5000, "tcp")
 
 # Constants
 DEFAULT_IP = "127.0.0.1"
@@ -24,9 +27,16 @@ def create_keys_pair(pwd):
     ecc_keygen.ecc_keygen(pwd)
 
 def load_keys_pair(pwd):
-    global private_key, public_key
-    key_mgr = ecc_keygen.ecc_keygen(pwd)
-    private_key, public_key = key_mgr.load_key(pwd)
+    global private_key
+    global public_key
+    try:
+        output = ecc_keygen.ecc_keygen(pwd).load_key(pwd)
+        private_key = output[0]
+        public_key = output[1]
+        return True
+    except:
+        print("Failed to load private key")
+        return False
 
 # Auth window
 def start_auth():
@@ -38,13 +48,17 @@ def start_auth():
         if not os.path.exists("private_key.pem"):
             create_keys_pair(pwd)
             messagebox.showinfo("Thành công", "Đăng ký thành công")
-        try:
-            load_keys_pair(pwd)
-            messagebox.showinfo("OK", "Đăng nhập thành công")
             root.destroy()
             open_main_gui()
-        except Exception:
-            messagebox.showerror("Sai", "Mật khẩu không đúng!")
+
+        else:
+            if load_keys_pair(pwd):
+                messagebox.showinfo("OK", "Đăng nhập thành công")
+                root.destroy()
+                load_keys_pair(pwd)
+                open_main_gui()
+            else:
+                messagebox.showerror("Sai", "Mật khẩu không đúng!")
 
     root = tk.Tk()
     root.title("Xác thực")
@@ -60,7 +74,7 @@ def show_log(widget, msg):
     widget.insert(tk.END, msg + "\n")
     widget.see(tk.END)
 
-# Send window
+# -- Send window --
 def send_mode():
     signer = ecc_signing_and_verify.ecc_signing_and_verify(
         private_key=private_key,
@@ -82,13 +96,27 @@ def send_mode():
         if not selected_file['path']:
             messagebox.showerror("Lỗi", "Chưa chọn file để gửi!")
             return
-        # Split file
+
+        # 0) serialize public key ra PEM và log
+        pem = ecc_keygen.public_encode_to_string(public_key)
+        show_log(log, "[Send] My public key PEM:\n" + pem)
+
+        # 1) split
         handler.split_file(selected_file['path'])
-        parts = sorted(glob.glob(f"{os.path.basename(selected_file['path'])}.part*"))
-        # if not parts:
-        #     messagebox.showerror("Lỗi", "Không tách được file, kiểm tra lại đường dẫn!")
-        #     return
-        show_log(log, f"[Send] Tách thành {len(parts)} phần.")
+
+        # 2) xác định đường dẫn và pattern
+        parts = sorted(glob.glob("temp.zip.part*"))
+
+        # 3) log lại
+        show_log(log, f"[Send] Tách thành {len(parts)} phần:")
+        for p in parts:
+            size = os.path.getsize(p)
+            show_log(log, f"    {p} ({size} bytes)")
+
+        if not parts:
+            show_log(log, "[Send][LỖI] Không tìm thấy file part nào!")
+            return
+
         # Bind IP/Port
         ip = ip_entry.get().strip() or DEFAULT_IP
         try:
@@ -96,10 +124,11 @@ def send_mode():
         except ValueError:
             messagebox.showerror("Lỗi", "Port không hợp lệ!")
             return
-        # Prompt file transfer start
+
         show_log(log, "[Send] Khởi tạo tunnel và listener...")
         tunnel = ngrok.connect(port, "tcp")
         show_log(log, f"[Send] Ngrok URL: {tunnel.public_url}")
+
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -122,7 +151,8 @@ def send_mode():
                     with open(p, "rb") as f:
                         while True:
                             chunk = f.read(BUFFER_SIZE)
-                            if not chunk: break
+                            if not chunk:
+                                break
                             conn.sendall(chunk)
                     show_log(log, f"[Send] Gửi xong {os.path.basename(p)}")
                 conn.close()
@@ -138,7 +168,7 @@ def send_mode():
 
     win = tk.Toplevel()
     win.title("Send")
-    win.geometry("400x350")
+    win.geometry("400x380")
     tk.Label(win, text="Bind IP:").pack()
     ip_entry = tk.Entry(win); ip_entry.insert(0, DEFAULT_IP); ip_entry.pack()
     tk.Label(win, text="Bind Port:").pack()
@@ -148,35 +178,37 @@ def send_mode():
     log = tk.Text(win, height=12); log.pack(fill=tk.BOTH, expand=True)
     show_log(log, "[Send] Sẵn sàng.")
 
-# Receive window
+# -- Receive window --
 def receive_mode():
+    # tạm public_key_sender là None, sẽ cập nhật sau khi người dùng nhập
     signer = ecc_signing_and_verify.ecc_signing_and_verify(
         private_key=private_key,
         public_key=public_key,
         public_key_sender=None
     )
     handler = file_handling.file_handling(signer)
-    save_dir = {'path': None}
-
-    def choose_save_dir():
-        d = filedialog.askdirectory(title="Chọn thư mục lưu file nhận")
-        if d:
-            save_dir['path'] = d
-            show_log(log_r, f"[Recv] Lưu vào: {d}")
-        else:
-            show_log(log_r, "[Recv] Chưa chọn thư mục lưu.")
+    save_dir = os.path.dirname(os.path.abspath(__file__))
 
     def receive_parts():
-        if not save_dir['path']:
-            messagebox.showerror("Lỗi", "Chưa chọn thư mục lưu!")
+        # đọc public key của sender từ entry
+        sender_pk = pk_entry.get().strip()
+        if not sender_pk:
+            messagebox.showerror("Lỗi", "Vui lòng nhập Public Key của Sender!")
             return
+
+        # cập nhật signer với public_key_sender mới
+        signer.public_key_sender = sender_pk
+
         addr = addr_entry.get().strip()
-        if addr.startswith("tcp://"): addr = addr[6:]
+        if addr.startswith("tcp://"):
+            addr = addr[6:]
         try:
-            host, prt = addr.split(":"); port = int(prt)
+            host, prt = addr.split(":")
+            port = int(prt)
         except:
             messagebox.showerror("Lỗi", "Địa chỉ không hợp lệ!")
             return
+
         show_log(log_r, f"[Recv] Kết nối tới {host}:{port}...")
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -184,40 +216,51 @@ def receive_mode():
         except Exception as e:
             messagebox.showerror("Lỗi", f"Kết nối thất bại: {e}")
             return
+
         show_log(log_r, "[Recv] Đã kết nối, bắt đầu nhận...")
-        # change cwd to save dir
-        os.makedirs(save_dir['path'], exist_ok=True)
-        os.chdir(save_dir['path'])
+        os.makedirs(save_dir, exist_ok=True)
+        os.chdir(save_dir)
+
         while True:
             hdr = b""
             while b"\n" not in hdr:
                 d = conn.recv(1)
-                if not d: break
+                if not d:
+                    break
                 hdr += d
-            if not hdr: break
+            if not hdr:
+                break
             info = json.loads(hdr.decode().strip())
             fname, remain = info["filename"], info["filesize"]
             with open(fname, "wb") as f:
-                while remain>0:
+                while remain > 0:
                     data = conn.recv(min(BUFFER_SIZE, remain))
-                    if not data: break
+                    if not data:
+                        break
                     f.write(data)
                     remain -= len(data)
             show_log(log_r, f"[Recv] Nhận xong {fname}")
+
         conn.close()
-        # merge parts
         handler.merge_chunks()
         show_log(log_r, "[Recv] Đã ghép file gốc và kết thúc.")
 
     win = tk.Toplevel()
     win.title("Receive")
-    win.geometry("400x300")
-    ttk.Button(win, text="Chọn thư mục lưu", command=choose_save_dir).pack(pady=5)
+    win.geometry("400x350")
+    tk.Label(win, text=f"Lưu file vào: {save_dir}").pack(pady=5)
+    # thêm Entry cho public key của Sender
+    tk.Label(win, text="Sender's Public Key:").pack(pady=5)
+    pk_entry = tk.Entry(win, width=60)
+    pk_entry.pack()
     tk.Label(win, text="Ngrok TCP URL:").pack(pady=5)
-    addr_entry = tk.Entry(win, width=40); addr_entry.pack()
+    addr_entry = tk.Entry(win, width=40)
+    addr_entry.pack()
     ttk.Button(win, text="Nhận file", command=receive_parts).pack(pady=5)
-    log_r = tk.Text(win, height=12); log_r.pack(fill=tk.BOTH, expand=True)
+    log_r = tk.Text(win, height=12)
+    log_r.pack(fill=tk.BOTH, expand=True)
     show_log(log_r, "[Recv] Chờ thao tác...")
+
 
 # Main
 
