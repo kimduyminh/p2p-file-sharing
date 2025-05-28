@@ -1,15 +1,50 @@
 #!/usr/bin/env python3
+import platform
 import socket
 import threading
 import os
 import json
+import urllib
+import zipfile
 from tkinter import Tk, Button, simpledialog, filedialog
 from pyngrok import ngrok, conf
 
 # Uncomment and set your ngrok auth token if needed
 # conf.get_default().auth_token = "YOUR_NGROK_AUTH_TOKEN"
-
+conf.get_default().auth_token = "2X5BA7ayiL0lJZEGuOANriJn0kk_2UevpLCLrYRbTi1ToAXmP"
 BUFFER = 1024
+NGROK_TOKEN = "2X5BA7ayiL0lJZEGuOANriJn0kk_2UevpLCLrYRbTi1ToAXmP"
+NGROK_DIR = "tools"
+NGROK_FILENAME = "ngrok.exe" if platform.system() == "Windows" else "ngrok"
+NGROK_PATH = os.path.join(NGROK_DIR, NGROK_FILENAME)
+# ==========================
+
+def ngrok_exists():
+    return os.path.exists(NGROK_PATH)
+
+def download_ngrok():
+    print("[↓] Downloading ngrok...")
+    system = platform.system()
+
+    if system == "Windows":
+        url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-windows-amd64.zip"
+    elif system == "Linux":
+        url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip"
+    elif system == "Darwin":
+        url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-darwin-amd64.zip"
+    else:
+        raise Exception("Unsupported OS")
+
+    os.makedirs(NGROK_DIR, exist_ok=True)
+    zip_path = os.path.join(NGROK_DIR, "ngrok.zip")
+    urllib.request.urlretrieve(url, zip_path)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(NGROK_DIR)
+    os.remove(zip_path)
+
+    os.chmod(NGROK_PATH, 0o755)
+    print("[✓] ngrok downloaded and ready!")
 
 def choose_file():
     path = filedialog.askopenfilename(title="Chọn file để gửi")

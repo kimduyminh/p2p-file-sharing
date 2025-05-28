@@ -10,6 +10,7 @@ import ecc_keygen as ecc_keygen
 import ecc_signing_and_verify as ecc_signing_and_verify
 import file_handling as file_handling
 from pyngrok import ngrok
+from p2p_tcp_with_ngrok_port_forward import download_ngrok, ngrok_exists
 
 ngrok.kill()
 # tunnel = ngrok.connect(5000, "tcp")
@@ -274,4 +275,6 @@ def open_main_gui():
     root.mainloop()
 
 if __name__ == "__main__":
+    if not ngrok_exists():
+        download_ngrok()
     start_auth()
