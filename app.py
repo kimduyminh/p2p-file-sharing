@@ -1,3 +1,4 @@
+import shutil
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
@@ -10,6 +11,8 @@ import ecc_keygen as ecc_keygen
 import ecc_signing_and_verify as ecc_signing_and_verify
 import file_handling as file_handling
 from pyngrok import ngrok
+
+from ecc_keygen import public_decode_from_string
 from p2p_tcp_with_ngrok_port_forward import download_ngrok, ngrok_exists
 
 ngrok.kill()
@@ -49,6 +52,7 @@ def start_auth():
         if not os.path.exists("private_key.pem"):
             create_keys_pair(pwd)
             messagebox.showinfo("Thành công", "Đăng ký thành công")
+            load_keys_pair(pwd)
             root.destroy()
             open_main_gui()
 
@@ -156,8 +160,14 @@ def send_mode():
                                 break
                             conn.sendall(chunk)
                     show_log(log, f"[Send] Gửi xong {os.path.basename(p)}")
+                    try:
+                        os.remove(p)
+                        show_log(log, f"[Send] Đã xóa {p}")
+                    except Exception as e:
+                        show_log(log, f"[Send] Không thể xóa {p}: {e}")
                 conn.close()
                 show_log(log, "[Send] Hoàn tất gửi tất cả parts.")
+                shutil.rmtree("temp", ignore_errors=True)
             except Exception as e:
                 show_log(log, f"[Send] Lỗi trong quá trình gửi: {e}")
             finally:
@@ -198,7 +208,7 @@ def receive_mode():
             return
 
         # cập nhật signer với public_key_sender mới
-        signer.public_key_sender = sender_pk
+        signer.public_key_sender = public_decode_from_string(sender_pk)
 
         addr = addr_entry.get().strip()
         if addr.startswith("tcp://"):
